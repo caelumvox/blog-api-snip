@@ -1,0 +1,203 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  blog-api
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+  Api:
+    BinaryMediaTypes:
+      - image/png
+      - image/jpg
+      - image/jpeg
+
+Resources:
+  BlogGatewayApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      BinaryMediaTypes:
+        - image/jpeg
+        - image/png
+
+  # GET /entry
+  BlogEntryGetAllResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt BlogGatewayApi.RootResourceId
+      PathPart: entry
+      RestApiId: !Ref BlogGatewayApi
+  BlogEntryGetAllMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: GET
+      ResourceId: !Ref BlogEntryGetAllResource
+      RestApiId: !Ref BlogGatewayApi
+      Integration:
+        Uri: !Sub
+          - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations'
+          - lambdaArn: !GetAtt "BlogFunction.Arn"
+
+  # POST /login
+  BlogLoginPostResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt BlogGatewayApi.RootResourceId
+      PathPart: login
+      RestApiId: !Ref BlogGatewayApi
+  BlogLoginPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: POST
+      ResourceId: !Ref BlogLoginPostResource
+      RestApiId: !Ref BlogGatewayApi
+      Integration:
+        Uri: !Sub
+          - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations'
+          - lambdaArn: !GetAtt "BlogFunction.Arn"
+
+  # OPTIONS /login
+  BlogLoginOptionsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt BlogGatewayApi.RootResourceId
+      PathPart: login
+      RestApiId: !Ref BlogGatewayApi
+  BlogLoginOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: OPTIONS
+      ResourceId: !Ref BlogLoginOptionsResource
+      RestApiId: !Ref BlogGatewayApi
+      Integration:
+        Uri: !Sub
+          - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations'
+          - lambdaArn: !GetAtt "BlogFunction.Arn"
+
+  # POST /media
+  BlogMediaPostResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt BlogGatewayApi.RootResourceId
+      PathPart: media
+      RestApiId: !Ref BlogGatewayApi
+  BlogMediaPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: POST
+      ResourceId: !Ref BlogMediaPostResource
+      RestApiId: !Ref BlogGatewayApi
+      RequestModels:
+        image/jpeg: BlogMediaModel
+      Integration:
+        Uri: !Sub
+          - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations'
+          - lambdaArn: !GetAtt "BlogFunction.Arn"
+
+  BlogFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Events:
+        BlogEntryGetAll:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /entry
+            Method: get
+        BlogEntryGetOne:
+          Type: Api
+          Properties:
+            Path: /entry/{id}
+            Method: get
+        BlogEntryPost:
+          Type: Api
+          Properties:
+            Path: /entry
+            Method: post
+        BlogEntryPut:
+          Type: Api
+          Properties:
+            Path: /entry/{id}
+            Method: put
+        BlogEntryDelete:
+          Type: Api
+          Properties:
+            Path: /entry/{id}
+            Method: delete
+        BlogEntryOptions:
+          Type: Api
+          Properties:
+            Path: /entry
+            Method: options
+        BlogEntryPutOptions:
+          Type: Api
+          Properties:
+            Path: /entry/{id}
+            Method: options
+        BlogLoginPost:
+          Type: Api
+          Properties:
+            Path: /login
+            Method: post
+        BlogLoginOptions:
+          Type: Api
+          Properties:
+            Path: /login
+            Method: options
+        BlogMediaPost:
+          Type: Api
+          Properties:
+            Path: /media
+            Method: post
+        BlogMediaGet:
+          Type: Api
+          Properties:
+            Path: /media
+            Method: get
+        BlogMediaDelete:
+          Type: Api
+          Properties:
+            Path: /media
+            Method: delete
+        BlogMediaOptions:
+          Type: Api
+          Properties:
+            Path: /media
+            Method: options
+      Policies:
+        - arn:aws:iam::942030503628:policy/BlogApiPolicy
+
+  BlogMediaModel:
+    Type: AWS::ApiGateway::Model
+    Properties:
+      ContentType: 'image/jpeg'
+      RestApiId: !Ref BlogGatewayApi
+      Schema: {}
+
+  BlogApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt "BlogFunction.Arn"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BlogGatewayApi}/*/*
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  BlogApi:
+    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  BlogFunction:
+    Description: "Blog API Lambda Function ARN"
+    Value: !GetAtt BlogFunction.Arn
+  BlogFunctionIamRole:
+    Description: "Implicit IAM Role created for Blog API function"
+    Value: !GetAtt BlogFunctionRole.Arn
